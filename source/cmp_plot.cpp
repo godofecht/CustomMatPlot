@@ -6,6 +6,7 @@
  */
 
 #include <stdexcept>
+#include <map>
 
 #include "cmp_datamodels.h"
 #include "cmp_frame.h"
@@ -59,9 +60,29 @@ static std::pair<float, float> findMinMaxValuesInGraphLines(
   return {min_value, max_value};
 }
 
-template <bool is_point_data_point = false>
+//Added by abhishek shivakumar 03-May-22
+class PointAndGraphLine
+{
+    juce::Point<float> point;
+    cmp::GraphLine* graphLine;
+
+public:
+
+    PointAndGraphLine (juce::Point<float> point, cmp::GraphLine *graphLine)
+    {
+
+    }
+};
+
+
+
+template<bool is_point_data_point = false>
 std::pair<juce::Point<float>, const GraphLine*> Plot::findNearestPoint(
     juce::Point<float> point, const GraphLine* graphline) {
+
+    //fix for windows. Credits: Abhishek Shivakumar
+
+
   auto closest_point = juce::Point<float>(std::numeric_limits<float>::max(),
                                           std::numeric_limits<float>::max());
 
@@ -725,11 +746,11 @@ void Plot::mouseDown(const juce::MouseEvent& event) {
               .toFloat();
 
       const auto [closest_data_point, nearest_graph_line] =
-          findNearestPoint(mouse_pos, nullptr);
+          findNearestPoint<false> (mouse_pos, nullptr);
 
-      m_trace->addOrRemoveTracePoint(closest_data_point, nearest_graph_line);
-      m_trace->updateTracePointsBoundsFrom(m_common_graph_params);
-      m_trace->addAndMakeVisibleTo(this);
+      m_trace->addOrRemoveTracePoint (closest_data_point, nearest_graph_line);
+      m_trace->updateTracePointsBoundsFrom (m_common_graph_params);
+      m_trace->addAndMakeVisibleTo (this);
     }
   }
 }
@@ -752,15 +773,15 @@ void Plot::mouseDrag(const juce::MouseEvent& event) {
                event.getNumberOfClicks() == 1) {
       auto bounds = event.eventComponent->getBounds();
 
-      const auto mouse_pos =
+      const juce::Point<int> mouse_pos =
           bounds.getPosition() - m_graph_bounds.getPosition() +
           event.getEventRelativeTo(event.eventComponent).getPosition();
 
-      const auto* associated_graph_line =
+      const cmp::GraphLine* associated_graph_line =
           m_trace->getAssociatedGraphLine(event.eventComponent);
 
       const auto [closest_data_point, nearest_graph_line] =
-          findNearestPoint(mouse_pos.toFloat(), associated_graph_line);
+          findNearestPoint<false> (mouse_pos.toFloat(), associated_graph_line);
 
       m_trace->setDataValueFor(event.eventComponent, closest_data_point,
                                m_common_graph_params);
