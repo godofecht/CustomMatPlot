@@ -76,15 +76,15 @@ public:
 
 
 
-template<bool is_point_data_point = false>
+template<bool is_point_data_point>
 std::pair<juce::Point<float>, const GraphLine*> Plot::findNearestPoint(
     juce::Point<float> point, const GraphLine* graphline) {
 
     //fix for windows. Credits: Abhishek Shivakumar
 
 
-  auto closest_point = juce::Point<float>(std::numeric_limits<float>::max(),
-                                          std::numeric_limits<float>::max());
+  auto closest_point = juce::Point<float> (std::numeric_limits<float>::max(),
+                                           std::numeric_limits<float>::max());
 
   juce::Point<float> closest_data_point, current_point, current_data_point;
 
@@ -334,7 +334,7 @@ void Plot::plot(const std::vector<std::vector<float>>& y_data,
 }
 
 void Plot::realTimePlot(const std::vector<std::vector<float>>& y_data) {
-  updateYData(y_data, {});
+  updateYData (y_data, {});
 
   if (m_graph_lines[0]->getXValues().empty()) UNLIKELY {
       updateXData({});
@@ -342,7 +342,7 @@ void Plot::realTimePlot(const std::vector<std::vector<float>>& y_data) {
 
   updateTracePointsForNewGraphData();
 
-  repaint(m_graph_bounds);
+  repaint (m_graph_bounds);
 }
 
 void Plot::fillBetween(
@@ -663,7 +663,7 @@ void Plot::updateXData(const std::vector<std::vector<float>>& x_data) {
   const auto* data = &x_data;
 
   if (x_data.size() != m_graph_lines.size()) {
-    x_data_gen.resize(m_graph_lines.size());
+    x_data_gen.resize (m_graph_lines.size());
 
     data = &x_data_gen;
   }
