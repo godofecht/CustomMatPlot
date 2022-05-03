@@ -21,7 +21,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
-#include <cmp_datamodels.h>
+#include "cmp_datamodels.h"
 
 namespace cmp {
 /**

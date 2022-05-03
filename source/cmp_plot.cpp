@@ -128,7 +128,7 @@ void Plot::resetLookAndFeelChildrens(juce::LookAndFeel* lookandfeel) {
   }
 }
 
-Plot::~Plot() { resetLookAndFeelChildrens(); }
+Plot::~Plot() { resetLookAndFeelChildrens (); }
 
 enum RadioButtonIds { TraceZoomButtons = 1001 };
 
@@ -517,7 +517,7 @@ void Plot::paint(juce::Graphics& g) {
 }
 
 void Plot::parentHierarchyChanged() {
-  getParentComponent()->addMouseListener(this, true);
+  getParentComponent()->addMouseListener (this, true);
   lookAndFeelChanged();
 }
 
