@@ -68,7 +68,7 @@ class PointAndGraphLine
 
 public:
 
-    PointAndGraphLine (juce::Point<float> point, cmp::GraphLine *graphLine)
+    PointAndGraphLine (juce::Point<float>, cmp::GraphLine*)
     {
 
     }

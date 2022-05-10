@@ -47,7 +47,7 @@ GraphLine::findClosestGraphPointTo(const juce::Point<float>& this_graph_point,
   return {closest_graph_point, closest_data_point};
 }
 
-juce::Point<float> GraphLine::findClosestDataPointTo(
+juce::Point<float> GraphLine::findClosestDataPointTo (
     const juce::Point<float>& this_data_point, bool check_only_distance_from_x,
     bool only_visible_data_points) const {
   // No y_data empty.
