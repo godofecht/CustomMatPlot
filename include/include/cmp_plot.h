@@ -1,175 +1,308 @@
 /**
  * @file cmp_plot.h
- *
- * @brief Componenets for plotting 2-D lines/marker symbols
- *
+ * @brief Components for plotting 2-D lines and marker symbols
  * @ingroup CustomMatPlot
- *
+ * @details This file contains the Plot class and related components for
+ * creating 2D plots with features like line plots, scatter plots, zooming,
+ * panning, and customizable axes.
  * @author Frans Rosencrantz
- * Contact: Frans.Rosencrantz@gmail.com
+ * @contact Frans.Rosencrantz@gmail.com
  */
 
 #pragma once
 
 #include <memory>
+#include <span>
 
 #include "cmp_datamodels.h"
+#include "cmp_lookandfeel_base.h"
 #include "cmp_version.h"
 
 namespace cmp {
-inline namespace API_VERSION_MAJOR {
 
-/*
- *  \class Plot
- *  \brief A component to plot 2-D lines/marker symbols.
- *
- *  This class can be used to plot 2-D lines/marker symbols. It's also possible
- *  to trace the graph and zoom in/out of specific area. Other features: set
- *  the x- and y-limits, ticks and ticklabels.
+/**
+ * @class Plot
+ * @brief A component to plot 2-D lines/marker symbols
+ * @details This class provides a flexible plotting component with features
+ * including:
+ *          - Line and scatter plots
+ *          - Tracing
+ *          - Zooming and panning
+ *          - Customizable x/y limits, ticks and tick labels
+ *          - Linear and logarithmic axis scaling
+ *          - Legend support
+ * @see SemiLogX
+ * @see SemiLogY
+ * @see LogLog
  */
 class Plot : public juce::Component {
  public:
-  /** Destructor, making sure to set the lookandfeel in all subcomponenets to
+  /** Destructor, making sure to set the lookandfeel in all subcomponents to
    * nullptr. */
   ~Plot();
 
-  /* Constructor **/
+  /**
+   * @brief Construct a 2-D plot with the given per-axis scaling.
+   * @param x_scaling linear or logarithmic scaling for the x-axis
+   * @param y_scaling linear or logarithmic scaling for the y-axis
+   */
   Plot(const Scaling x_scaling = Scaling::linear,
        const Scaling y_scaling = Scaling::linear);
 
-  /** @brief Set the X-limits
-   *
-   *  Set the limits of X-axis.
-   *
-   *  @param min minimum value
-   *  @param max maximum value
-   *  @return void.
+  /**
+   * @brief Set the X-limits
+   * @param min minimum value
+   * @param max maximum value
    */
-  void xLim(const float min, const float max);
+  void setXLim(const float min, const float max);
 
-  /** @brief Set the Y-limits
-   *
-   *  Set the limits of Y-axis.
-   *
-   *  @param min minimum value
-   *  @param max maximum value
-   *  @return void.
+  /**
+   * @brief Set the Y-limits
+   * @param min minimum value
+   * @param max maximum value
    */
-  void yLim(const float min, const float max);
+  void setYLim(const float min, const float max);
 
-  /** @brief Plot y-data or y-data/x-data.
+  /**
+   * @brief Plot one or more series.
    *
-   *  Plot y-data or y-data/x-data. Each vector in y-data represents a single
-   *  graph line. E.g. If 'y_data.size() == 3', three graph lines will be
-   *  plotted. If 'x_data' is empty the x-values will be set to linearly
-   *  increasing from 1 to the size of y-data.
+   * Each @ref SeriesData carries its own x, y and optional styling, so the
+   * series can no longer fall out of index-alignment the way three parallel
+   * vectors could. Leave a series' x empty to auto-generate a 1..N ramp.
+   * If a series' attribute has no colour set, 'ColourIdsSeries' from the
+   * look and feel is used. Passing an empty list clears the series.
    *
-   *  The list of graph_attributes are applied per graph. E.g.
-   *  graph_attribute_list[0] is applied to graph[0]. If 'graph_colours' is
-   *  not set then 'ColourIdsGraph' is used for the lookandfeel.
+   * @code
+   *   plot({ {.x = t, .y = signal, .attribute = {.series_colour = red}},
+   *          {.y = samples} });   // second series uses an auto x-ramp
+   * @endcode
    *
-   *  @param y_data vector of vectors with the y-values.
-   *  @param x_data vector of vectors with the x-values.
-   *  @param graph_attribute_list a list of graph attributes @see
-   *  GraphAttribute.
-   *  @return void.
+   * @param series the series to plot @see SeriesData
    */
-  void plot(const std::vector<std::vector<float>>& y_data,
-            const std::vector<std::vector<float>>& x_data = {},
-            const GraphAttributeList& graph_attribute_list = {});
+  void plot(const SeriesDataList &series);
 
-  /** @brief Realtime plot.
+  /**
+   * @brief Plot a single series.
    *
-   * This plot function will only update the y-data in the graphs and only
-   * repaint the graph_area, therefore requires less CPU than the 'plot'
-   * function. x-data can be set through the 'plot' function.
+   * Convenience overload so a single series need not be wrapped in an extra
+   * pair of braces: @code plot({.y = samples}); @endcode
+   *
+   * @param series the series to plot @see SeriesData
+   */
+  void plot(const SeriesData &series);
+
+  /**
+   * @brief Plot one or more series, taking their values.
+   *
+   * Overload for a caller handing over series it no longer needs: the x- and
+   * y-values are moved into the plot rather than copied.
+   *
+   * @code plot(std::move(my_series)); @endcode
+   *
+   * @param series the series to plot, left empty afterwards @see SeriesData
+   */
+  void plot(SeriesDataList &&series);
+
+  /**
+   * @brief Plot a single series, taking its values.
+   *
+   * Also picked for a temporary, so @code plot({.y = makeSamples()}); @endcode
+   * moves rather than copies.
+   *
+   * @param series the series to plot, left empty afterwards @see SeriesData
+   */
+  void plot(SeriesData &&series);
+
+  /**
+   * @brief Remove all plotted series, clearing the plot.
+   *
+   * A named alias for plotting an empty list: @code plot({}); @endcode
+   */
+  void clear();
+
+  /**
+   * @brief Draw horizontal line(s)
+   *
+   * Draw horizontal line(s) at the given y-coordinates. Lines can be moved by
+   * dragging.
+   *
+   * @param y_coordinates Y-coordinates where lines will be drawn
+   * @param series_attributes Series attributes for the lines
+   */
+  void plotHorizontalLines(const std::vector<float> &y_coordinates,
+                           const SeriesAttributeList &series_attributes = {});
+
+  /**
+   * @brief Draw vertical line(s)
+   *
+   * Draw vertical line(s) at the given x-coordinates. Lines can be moved by
+   * dragging.
+   *
+   * @param x_coordinates X-coordinates where lines will be drawn
+   * @param series_attributes Series attributes for the lines
+   */
+  void plotVerticalLines(const std::vector<float> &x_coordinates,
+                         const SeriesAttributeList &series_attributes = {});
+
+  /** @brief Plot, but only update the y-data.
+   *
+   * This plot function will only update the y-data in the series and only
+   * repaint the axes_area, therefore requires less CPU than the 'plot'
+   * function. x-data must be set through the 'plot' function before calling
+   * this function.
+   *
+   * Pass the same number of y-values as the series already holds. Passing a
+   * different number is handled - the x-data is regenerated as a ramp, which
+   * replaces any x-data set through 'plot' - but it costs exactly the work
+   * this function exists to avoid, so prefer 'plot' when the number of points
+   * changes.
    *
    * @param y_data vector of vectors with the y-values.
    */
-  void realTimePlot(const std::vector<std::vector<float>>& y_data);
+  void plotUpdateYOnly(const std::vector<std::vector<float>> &y_data);
 
-  /** @brief Fill the area between two data lines.
+  /** @brief Update only the y-data of a single series.
    *
-   * 1. Use 'plot' or 'realTimePlot' to draw the graph lines.
-   * 2. Use this function to indicate between which graph lines the area is
-   *    filled.
+   * Convenience overload for the common real-time case of one series, so the
+   * y-values need not be wrapped in an extra pair of braces:
+   * @code plotUpdateYOnly(samples); @endcode
    *
-   * The colour of the graph areas is defined by 'fill_area_colours'.
-   * 'ColourIdsGraph' is used if 'fill_area_colours' is empty.
+   * Takes a span, so the values can come from any contiguous range - a
+   * vector, a std::array, a raw buffer, or a sub-range of a larger one -
+   * without being packed into a vector first, and are copied straight into
+   * the series:
+   * @code plotUpdateYOnly({fft_buffer.data(), fft_size}); @endcode
    *
-   * @param graph_spread_indices the indices between which graph lines the are
-   *        is filled.
-   * @param fill_area_colours the colours of the areas.
+   * @param y_data the new y-values for the first series.
    */
-  void fillBetween(const std::vector<GraphSpreadIndex>& graph_spread_indices,
-                   const std::vector<juce::Colour>& fill_area_colours = {});
+  void plotUpdateYOnly(std::span<const float> y_data);
+
+  /** @brief Plot, but only update the y-data, for several series.
+   *
+   * As the vector-of-vectors overload, but each series' values can come from
+   * any contiguous range. A caller holding one buffer per channel - which is
+   * how audio arrives - can plot them without first copying everything into a
+   * vector of vectors:
+   *
+   * @code
+   *   const std::array<std::span<const float>, 2> channels{
+   *       std::span(buffer.getReadPointer(0), num_samples),
+   *       std::span(buffer.getReadPointer(1), num_samples)};
+   *
+   *   plot.plotUpdateYOnly(channels);
+   * @endcode
+   *
+   * Note that a vector of vectors does not convert to a span of spans, so
+   * such callers keep using the overload above.
+   *
+   * @param y_data one range of y-values per series.
+   */
+  void plotUpdateYOnly(std::span<const std::span<const float>> y_data);
+
+  /** @brief Update only the y-data of a single series, from a braced list.
+   *
+   * A braced list does not convert to a span, so this overload keeps
+   * @code plotUpdateYOnly({4.f, 3.f, 2.f, 1.f}); @endcode working.
+   *
+   * @param y_data the new y-values for the first series.
+   */
+  void plotUpdateYOnly(std::initializer_list<float> y_data);
+
+  /** @brief Fill the area between two data lines
+   *
+   * Steps to use:
+   * 1. Draw series using plot() or plotUpdateYOnly()
+   * 2. Call this function to fill area between specified lines
+   *
+   * @param spread_indices Indices of series to fill between
+   * @param fill_area_colours Colours for filled areas (uses ColourIdsSeries if
+   * empty)
+   */
+  void fillBetween(const std::vector<SpreadIndex> &spread_indices,
+                   const std::vector<juce::Colour> &fill_area_colours = {});
 
   /** @brief Set downsampling type.
    *
    * @see cmp::DownsamplingType for the different types.
    * default is DownsamplingType::xy_downsampling.
+   * @note The downsampling type will be set to
+   * DownsamplingType::no_downsampling if move_point_type >
+   * PixelPointMoveType::none.
    *
    * @param downsampling_type the type of downsampling.
    */
-  void setDownsamplingType(const DownsamplingType downsampling_type) noexcept;
+  void setDownsamplingType(const DownsamplingType downsampling_type);
 
-  /** @brief Set the text for label on the X-axis
+  /** @brief Set if it should be possible to move pixel points and in which
+   * direction(s).
    *
-   *  Set the text for label on the X-axis.
+   * @note The downsampling type will be set to
+   * DownsamplingType::no_downsampling if move_point_type >
+   * PixelPointMoveType::none.
+   * @see cmp::PixelPointMoveType for the different types, default is
+   * PixelPointMoveType::none.
    *
-   *  @param x_label text to be displayed on the x-axis
-   *  @return void.
+   * @param move_points_type the type of pixel point movement.
    */
-  void setXLabel(const std::string& x_label);
+  void setMovePointsType(const PixelPointMoveType move_points_type);
 
-  /** @brief Set the text for label on the Y-axis
+  /** @brief Set SeriesChangedCallback.
    *
-   *  Set the text for label on the Y-axis.
+   * Set a callback function that is triggered when a series data is changed
+   * to get the new x/y-data.
    *
-   *  @param y_label text to be displayed on the y-axis
-   *  @return void.
+   * @see cmp::SeriesChangedCallback for more information.
+   * @param series_changed_callback the callback function.
    */
-  void setYLabel(const std::string& y_label);
+  void setSeriesDataChangedCallback(
+      SeriesChangedCallback series_changed_callback);
 
-  /** @brief Set x & y-axis scaling
-   *
-   *  Set x & y-axis scaling of the plot. @see cmp::Scaling in cmp:datamodels.h.
-   *
-   *  @param x_scaling x-axis scaling.
-   *  @param y_scaling y-axis scaling.
-   *  @return void.
+  /**
+   * @brief Set the text for label on the X-axis
+   * @param x_label text to be displayed on the x-axis
+   */
+  void setXLabel(const std::string &x_label);
+
+  /**
+   * @brief Set the text for label on the Y-axis
+   * @param y_label text to be displayed on the y-axis
+   */
+  void setYLabel(const std::string &y_label);
+
+  /**
+   * @brief Set x & y-axis scaling
+   * @param x_scaling x-axis scaling
+   * @param y_scaling y-axis scaling
+   * @see cmp::Scaling in cmp_datamodels.h
    */
   void setScaling(Scaling x_scaling, Scaling y_scaling) noexcept;
 
-  /** @brief Set the text for title label
-   *
-   *  Set the text for title label.
-   *
-   *  @param title text to be displayed as the title
-   *  @return void.
+  /**
+   * @brief Set the text for title label
+   * @param title text to be displayed as the title
    */
-  void setTitle(const std::string& title);
+  void setTitle(const std::string &title);
 
-  /** @brief Set trace-point
+  /**
+   * @brief Set trace-point
    *
-   * Set a trace-point to the point on a graph-line closest the given
-   * coordinate. The tracepoint will be removed if it already exists.
+   * Set a trace-point to the point on a series closest to the given
+   * coordinate. The tracepoint is removed if it already exists.
    *
-   * @param trance_point_coordinate the coordinate of where the trace-point is
-   * wish to be set.
-   * @return void.
+   * @param trace_point_coordinate the coordinate where the trace-point should
+   * be set
    */
-  void setTracePoint(const juce::Point<float>& trace_point_coordinate);
+  void setTracePoint(const juce::Point<float> &trace_point_coordinate);
 
-  /** @brief Set the text for grid labels on the x-axis
+  /**
+   * @brief Set the text for grid labels on the x-axis
    *
-   *  Set custom text for the grid labels and overrides the labels made based
-   *  the x-data.
+   * Set custom text for the grid labels and overrides the labels made based
+   * on the x-data.
    *
-   *  @param x_labels text for the labels displayed as the x-axis
-   *  @return void.
+   * @param x_labels text for the labels displayed as the x-axis
    */
-  void setXTickLabels(const std::vector<std::string>& x_labels);
+  void setXTickLabels(const std::vector<std::string> &x_labels);
 
   /** @brief Set the text for tick labels on the y-axis
    *
@@ -177,100 +310,80 @@ class Plot : public juce::Component {
    *  the y-data.
    *
    *  @param y_labels text for the labels displayed as the y-axis
-   *  @return void.
    */
-  void setYTickLabels(const std::vector<std::string>& y_labels);
+  void setYTickLabels(const std::vector<std::string> &y_labels);
 
   /** @brief Set the ticks values
    *
-   *  Use custom ticks to draw the grid lines and tick labels where you wanted.
+   *  Use custom ticks to draw the grid lines and tick labels where you want.
    *
-   *  @param x_ticks x-postions of ticks
-   *  @return void.
+   *  @param x_ticks x-positions of ticks
    */
-  void setXTicks(const std::vector<float>& x_ticks);
+  void setXTicks(const std::vector<float> &x_ticks);
 
   /** @brief Set the ticks values
    *
-   *  Use custom ticks to draw the grid lines and tick labels where you wanted.
+   *  Use custom ticks to draw the grid lines and tick labels where you want.
    *
-   *  @param y_ticks y-postions of ticks
-   *  @return void.
+   *  @param y_ticks y-positions of ticks
    */
-  void setYTicks(const std::vector<float>& y_ticks);
+  void setYTicks(const std::vector<float> &y_ticks);
 
-  /** @brief Turn on grids
+  /** @brief Enables grid or tiny grid
    *
-   *  Turn on grids and tiny grids.
+   *  Turn on grids or tiny grids. @see GridType in cmp_datamodels.h.
    *
-   *  @param grid_on grids is drawn if true.
-   *  @param tiny_grid_on tiny grids is drawn if true.
-   *  @return void.
+   *  @param grid_type type of grid to be drawn.
    */
-  void gridON(const bool grid_on, const bool tiny_grid_on);
+  void setGridType(const GridType grid_type);
 
   /** @brief Clear tracepoints
    *
    * Removes all tracepoints.
    *
-   * @return void.
    */
   void clearTracePoints() noexcept;
 
   /** @brief Set Legend
    *
-   *  Set descriptions for each graph. The label 'label1..N' will be used if
-   *  fewers numbers of graph_descriptions are provided than existing numbers of
-   *  graphs.
+   *  Set a description for each series. The label 'label1..N' is used when
+   *  fewer descriptions are provided than there are series.
    *
-   *  @param graph_descriptions description of the graphs
-   *  @return void.
+   *  @param series_descriptions description of the series
    */
-  void setLegend(const std::vector<std::string>& graph_descriptions);
-
-  /** @brief  Sets the look and feel to use for this component.
-   *
-   * The object passed in will not be deleted by the component, so it's the
-   * caller's responsibility to manage it. It may be used at any time until this
-   * component has been deleted.
-   *
-   * Calling this method will also invoke the juce::Componenet::setLookAndFeel
-   * and in turn sendLookAndFeelChange() method.
-   *
-   * @see getLookAndFeel, lookAndFeelChanged
-   */
-  void setLookAndFeel(PlotLookAndFeel* look_and_feel);
+  void setLegend(const std::vector<std::string> &series_descriptions);
 
   //==============================================================================
 
   /** @brief This lambda is triggered when a tracepoint value is changed.
    *
-   * @param current_plot poiter to this plot.
+   * @param current_plot pointer to this plot.
    * @param previous_trace_point previous tracepoint value.
    * @param new_trace_point the new tracepoint value.
    */
-  std::function<void(const juce::Component* current_plot,
+  std::function<void(const juce::Component *current_plot,
                      const juce::Point<float> previous_trace_point,
                      const juce::Point<float> new_trace_point)>
       onTraceValueChange = nullptr;
 
   //==============================================================================
 
-  /** @brief A set of colour IDs to use to change the colour of various aspects
-   *  of the Plot.
-   *
-   *  These constants can be used either via the Component::setColour(), or
-   *  LookAndFeel::setColour() methods.
-   *
-   *  @see Component::setColour, Component::findColour, LookAndFeel::setColour,
-   *  LookAndFeel::findColour
+  /** @brief Colour IDs for customizing plot appearance
+   * @details These IDs can be used with Component::setColour() or
+   * LookAndFeel::setColour() to customize colours of various plot elements.
+   * @note All colour IDs should be passed to setColour() along with the desired
+   * Colour value
+   * @see Component::setColour
+   * @see Component::findColour
+   * @see LookAndFeel::setColour
    */
   enum ColourIds : int {
     background_colour,        /**< Colour of the background. */
     grid_colour,              /**< Colour of the grids. */
+    translucent_grid_colour,  /**< Colour of the translucent grids. */
     x_grid_label_colour,      /**< Colour of the label for each x-grid line. */
     y_grid_label_colour,      /**< Colour of the label for each y-grid line. */
-    frame_colour,             /**< Colour of the frame around the graph area. */
+    frame_colour,             /**< Colour of the frame around the axes area. */
     x_label_colour,           /**< Colour of the text on the x-axis. */
     y_label_colour,           /**< Colour of the label on the y-axis. */
     title_label_colour,       /**< Colour of the title label. */
@@ -286,295 +399,274 @@ class Plot : public juce::Component {
 
   /** @brief A set of colour IDs to use to change the colour of each plot
    * line.*/
-  enum ColourIdsGraph : int {
-    first_graph_colour = (1u << 16u), /**< Colour of the first graph. */
-    second_graph_colour,              /**< Colour of the second graph. */
-    third_graph_colour,               /**< Colour of the third graph. */
-    fourth_graph_colour,              /**< Colour of the fourth graph. */
-    fifth_graph_colour,               /**< Colour of the fifth graph. */
-    sixth_graph_colour                /**< Colour of the sixth graph. */
+  enum ColourIdsSeries : int {
+    first_series_colour = (1u << 16u), /**< Colour of the first series. */
+    second_series_colour,              /**< Colour of the second series. */
+    third_series_colour,               /**< Colour of the third series. */
+    fourth_series_colour,              /**< Colour of the fourth series. */
+    fifth_series_colour,               /**< Colour of the fifth series. */
+    sixth_series_colour                /**< Colour of the sixth series. */
   };
 
   /**
-   *   These methods define a interface for the LookAndFeel class of juce.
-   *   The Plot class needs a LookAndFeel, that implements these methods.
-   *   The default implementation can be seen in, \see cmp_lookandfeelmethods.h
+   * @brief The 2D-specific look-and-feel interface for the Plot class.
+   *
+   * A Plot needs a juce::LookAndFeel that implements these methods. The
+   * dimension-agnostic part of the interface is defined in
+   * @ref PlotLookAndFeelBase; this class adds the 2D-specific methods. The
+   * default implementation is @ref PlotLookAndFeel in cmp_lookandfeel.h.
    */
-  class LookAndFeelMethods : public juce::LookAndFeel_V4 {
+  class LookAndFeelMethods : public PlotLookAndFeelBase {
    public:
     virtual ~LookAndFeelMethods() = default;
 
-    /** Draw background. */
-    virtual void drawBackground(juce::Graphics& g,
-                                const juce::Rectangle<int>& bound) = 0;
-
-    /** This method draws a frame around the graph area. */
-    virtual void drawFrame(juce::Graphics& g,
-                           const juce::Rectangle<int> bounds) = 0;
-
-    /** This method draws a single graph line. */
-    virtual void drawGraphLine(juce::Graphics& g,
-                               const GraphLineDataView graph_line_data) = 0;
-
     /** This method draws the labels on the x and y axis. */
-    virtual void drawGridLabels(juce::Graphics& g,
-                                const LabelVector& x_axis_labels,
-                                const LabelVector& y_axis_labels) = 0;
+    virtual void drawGridLabels(juce::Graphics &g,
+                                const LabelVector &x_axis_labels,
+                                const LabelVector &y_axis_labels) = 0;
 
     /** This method draws either a vertical or horizontal gridline. */
-    virtual void drawGridLine(juce::Graphics& g, const GridLine& grid_line,
-                              const bool grid_on) = 0;
+    virtual void drawGridLine(juce::Graphics &g, const GridLine &grid_line,
+                              const GridType grid_type) = 0;
 
-    /** This method draws the legend. */
-    virtual void drawLegend(juce::Graphics& g,
-                            std::vector<LegendLabel> legend_info,
-                            const juce::Rectangle<int>& bound) = 0;
-
-    /** This method draws the legend background. */
-    virtual void drawLegendBackground(
-        juce::Graphics& g, const juce::Rectangle<int>& legend_bound) = 0;
-
-    /** Fill area between two graph lines. */
-    virtual void drawSpread(juce::Graphics& g, const GraphLine* first_graph,
-                            const GraphLine* second_graph,
-                            const juce::Colour& spread_colour) = 0;
-
-    /** Draw a single trace point. */
-    virtual void drawTraceLabel(juce::Graphics& g, const cmp::Label& x_label,
-                                const cmp::Label& y_label,
-                                const juce::Rectangle<int> bound) = 0;
-
-    /** This method draws the trace label background. */
-    virtual void drawTraceLabelBackground(
-        juce::Graphics& g, const juce::Rectangle<int>& trace_label_bound) = 0;
-
-    /** Draw trace point. */
-    virtual void drawTracePoint(juce::Graphics& g,
-                                const juce::Rectangle<int>& bounds) = 0;
-
-    /** This method draws the area the user wants to zoom in on. */
-    virtual void drawZoomArea(
-        juce::Graphics& g, juce::Point<int>& start_coordinates,
-        const juce::Point<int>& end_coordinates,
-        const juce::Rectangle<int>& graph_bounds) noexcept = 0;
-
-    /** A method to find and get the colour from an id. */
-    virtual CONSTEXPR20 juce::Colour findAndGetColourFromId(
-        const int colour_id) const noexcept = 0;
-
-    /** Returns the Font used for the Trace and Zoom buttons. */
-    virtual CONSTEXPR20 juce::Font getButtonFont() const noexcept = 0;
-
-    /** Returns the 'ColourIdsGraph' for a given index.*/
-    virtual CONSTEXPR20 int getColourFromGraphID(
-        const std::size_t graph_index) const = 0;
-
-    /** Get the graph bounds, where the graphs and grids are to be drawn. A plot
-     * component can be given to base the graph bounds on the grid anf axis
-     * labels. */
-    virtual CONSTEXPR20 juce::Rectangle<int> getGraphBounds(
-        const juce::Rectangle<int> bounds,
-        const juce::Component* plot_comp = nullptr) const noexcept = 0;
-
-    /** Returns the Font used when drawing the grid labels. */
-    virtual CONSTEXPR20 juce::Font getGridLabelFont() const noexcept = 0;
-
-    /** Get Maximum allowed characters for grid labels. */
-    virtual CONSTEXPR20 std::size_t getMaximumAllowedCharacterGridLabel()
-        const noexcept = 0;
-
-    /** Get the legend position */
-    virtual CONSTEXPR20 juce::Point<int> getLegendPosition(
-        const juce::Rectangle<int>& graph_bounds,
-        const juce::Rectangle<int>& legend_bounds) const noexcept = 0;
-
-    /** Get the legend bounds */
-    virtual CONSTEXPR20 juce::Rectangle<int> getLegendBounds(
-        [[maybe_unused]] const juce::Rectangle<int>& bounds,
-        const std::vector<std::string>& label_texts) const noexcept = 0;
-
-    /** Returns the Font used when drawing legends. */
-    virtual juce::Font getLegendFont() const noexcept = 0;
-
-    /** Get margin used for labels and graph bounds. */
-    virtual CONSTEXPR20 std::size_t getMargin() const noexcept = 0;
-
-    /** Get a smaller margin. */
-    virtual CONSTEXPR20 std::size_t getMarginSmall() const noexcept = 0;
-
-    /** Get pixel length of marker symbol. */
-    virtual CONSTEXPR20 std::size_t getMarkerLength() const noexcept = 0;
-
-    /** Get the bounds of the componenet (Local bounds). */
-    virtual CONSTEXPR20 juce::Rectangle<int> getPlotBounds(
-        juce::Rectangle<int> bounds) const noexcept = 0;
-
-    /** Get the Font used when drawing trace labels. */
-    virtual CONSTEXPR20 juce::Font getTraceFont() const noexcept = 0;
+    /** Fill area between two series. */
+    virtual void drawSpread(juce::Graphics &g, const Series *first_series,
+                            const Series *second_series,
+                            const juce::Colour &spread_colour) = 0;
 
     /** Get position for a single trace point.*/
     virtual CONSTEXPR20 juce::Point<int> getTracePointPositionFrom(
-        const CommonPlotParameterView common_plot_params,
-        const juce::Point<float> graph_values) const noexcept = 0;
+        const juce::Rectangle<int> &axes_bounds, const Lim<float> x_lim,
+        const Scaling x_scaling, const Lim<float> y_lim,
+        const Scaling y_scaling,
+        const juce::Point<float> series_values) const noexcept = 0;
 
-    /** Get the local bounds used when drawing the trace label (the bounds
-     * around the x & y labels).*/
-    virtual CONSTEXPR20 juce::Rectangle<int> getTraceLabelLocalBounds(
-        const juce::Rectangle<int>& x_label_bounds,
-        const juce::Rectangle<int>& y_label_bounds) const noexcept = 0;
-
-    /** Get the local bounds used when drawing the trace point.*/
-    virtual CONSTEXPR20 juce::Rectangle<int> getTracePointLocalBounds()
+    /** Get distance from left of grid x-labels to right side of axes bound. */
+    virtual CONSTEXPR20 int getXGridLabelDistanceFromAxesBound()
         const noexcept = 0;
 
-    /** Get x and Y trace label bounds */
-    virtual std::pair<juce::Rectangle<int>, juce::Rectangle<int>>
-    getTraceXYLabelBounds(const std::string_view x_text,
-                          const std::string_view y_text) const = 0;
-
-    /** Get the bounds for the trace and zoom button. */
-    virtual CONSTEXPR20 std::pair<juce::Rectangle<int>, juce::Rectangle<int>>
-    getTraceAndZoomButtonBounds(
-        juce::Rectangle<int> graph_bounds) const noexcept = 0;
-
-    /** Get distance from left of grid x-labels to right side of graph bound. */
-    virtual CONSTEXPR20 int getXGridLabelDistanceFromGraphBound()
-        const noexcept = 0;
-
-    /** Returns the Font used when drawing the x-, y-axis and title labels.
-     */
-    virtual CONSTEXPR20 juce::Font getXYTitleFont() const noexcept = 0;
-
-    /** Get the x-scaling.*/
-    virtual CONSTEXPR20 Scaling getXScaling() const noexcept = 0;
-
-    /** Get distance from top of grid x-labels to bottom of graph bound. */
-    virtual CONSTEXPR20 int getYGridLabelDistanceFromGraphBound(
+    /** Get distance from top of grid x-labels to bottom of axes bound. */
+    virtual CONSTEXPR20 int getYGridLabelDistanceFromAxesBound(
         const int y_grid_label_width) const noexcept = 0;
-
-    /** Get the y-scaling.*/
-    virtual CONSTEXPR20 Scaling getYScaling() const noexcept = 0;
-
-    /** Defines the default colours */
-    virtual void setDefaultPlotColours() noexcept = 0;
 
     /** Updates the x-ticks with auto generated ticks. */
     virtual void updateVerticalGridLineTicksAuto(
-        const juce::Rectangle<int>& bounds, const bool tiny_grids,
-        const Lim_f x_lim, std::vector<float>& x_ticks) noexcept = 0;
+        const juce::Rectangle<int> &bounds, const Lim_f &x_lim,
+        const Scaling x_scaling, const GridType grid_type,
+        const std::vector<float> &previous_ticks,
+        std::vector<float> &x_ticks) noexcept = 0;
 
     /** Updates the y-ticks with auto generated ticks. */
     virtual void updateHorizontalGridLineTicksAuto(
-        const juce::Rectangle<int>& bounds, const bool tiny_grids,
-        const Lim_f y_lim, std::vector<float>& y_ticks) noexcept = 0;
+        const juce::Rectangle<int> &bounds, const Lim_f &y_lim,
+        const Scaling y_scaling, const GridType grid_type,
+        const std::vector<float> &previous_ticks,
+        std::vector<float> &y_ticks) noexcept = 0;
 
-    /** Updates the x-coordinates of the graph points used when drawing a graph
-     *  line. */
-    virtual void updateXGraphPoints(
-        const juce::Rectangle<int>& bounds, const Lim_f& x_lim,
-        const std::vector<float>& x_data,
-        std::vector<std::size_t>& graph_points_indices,
-        GraphPoints& graph_points) noexcept = 0;
+    /** Updates the x-coordinates of the pixel points used when drawing a series
+     *  line. The caller owns the sizing of 'pixel_points'; this method only
+     *  writes coordinates. */
+    virtual void updateXPixelPoints(
+        const std::vector<std::size_t> &update_only_these_indices,
+        const Scaling x_scaling, const Lim<float> x_lim,
+        const juce::Rectangle<int> &axes_bounds,
+        const std::vector<float> &x_data,
+        std::vector<std::size_t> &pixel_points_indices,
+        PixelPoints &pixel_points) noexcept = 0;
 
-    /** Updates the y-coordinates of the graph points used when drawing a graph
-     * line. */
-    virtual void updateYGraphPoints(
-        const juce::Rectangle<int>& bounds, const Lim_f& y_lim,
-        const std::vector<float>& y_data,
-        const std::vector<std::size_t>& graph_points_indices,
-        GraphPoints& graph_points) noexcept = 0;
+    /** Updates the y-coordinates of the pixel points used when drawing a series
+     * line. The caller owns the sizing of 'pixel_points'; this method only
+     * writes coordinates. */
+    virtual void updateYPixelPoints(
+        const std::vector<std::size_t> &update_only_these_indices,
+        const Scaling y_scaling, const Lim<float> y_lim,
+        const juce::Rectangle<int> &axes_bounds,
+        const std::vector<float> &y_data,
+        const std::vector<std::size_t> &pixel_points_indices,
+        PixelPoints &pixel_points) noexcept = 0;
 
     /** Updates both the vertical and horizontal grid labels. */
-    virtual void updateGridLabels(
-        const CommonPlotParameterView common_plot_params,
-        const std::vector<GridLine>& grid_lines, StringVector& x_label_ticks,
-        StringVector& y_label_ticks, LabelVector& x_axis_labels,
-        LabelVector& y_axis_labels) = 0;
+    virtual void updateGridLabels(const juce::Rectangle<int> &axes_bounds,
+                                  const std::vector<GridLine> &grid_lines,
+                                  StringVector &x_label_ticks,
+                                  StringVector &y_label_ticks,
+                                  LabelVector &x_axis_labels,
+                                  LabelVector &y_axis_labels) = 0;
 
-    /** Update the title, x and y axis labels. */
-    virtual void updateXYTitleLabels(const juce::Rectangle<int>& bounds,
-                                     const juce::Rectangle<int>& graph_bounds,
-                                     juce::Label& x_label, juce::Label& y_label,
-                                     juce::Label& title_label) = 0;
+    /** Is x-axis labels above or below the axes area */
+    virtual CONSTEXPR20 bool isXAxisLabelsBelowAxesArea() const noexcept = 0;
   };
 
   //==============================================================================
   /** @internal */
   void resized() override;
   /** @internal */
-  void paint(juce::Graphics& g) override;
+  void paint(juce::Graphics &g) override;
   /** @internal */
   void parentHierarchyChanged() override;
   /** @internal */
   void lookAndFeelChanged() override;
   /** @internal */
-  void mouseDrag(const juce::MouseEvent& event) override;
+  void mouseDrag(const juce::MouseEvent &event) override;
+  /** @internal mouse drag state. */
+  MouseDragState m_mouse_drag_state = MouseDragState::none;
   /** @internal */
-  void mouseDown(const juce::MouseEvent& event) override;
+  void mouseDown(const juce::MouseEvent &event) override;
   /** @internal */
-  void mouseUp(const juce::MouseEvent& event) override;
+  void mouseUp(const juce::MouseEvent &event) override;
+  /** @internal */
+  juce::Point<float> getMousePositionRelativeToAxesArea(
+      const juce::MouseEvent &event) const;
+  /** @internal */
+  void modifierKeysChanged(const juce::ModifierKeys &modifiers) override;
 
  private:
-  template <bool is_point_data_point>
-  std::pair<juce::Point<float>, const GraphLine*> findNearestPoint(
-      juce::Point<float> point, const GraphLine* graphline = nullptr);
-
-  template <Scaling x_scaling, Scaling y_scaling>
-  juce::LookAndFeel* castUserLookAndFeel(PlotLookAndFeel* user_look_and_feel);
-
-  std::unique_ptr<LookAndFeelMethods> getDefaultLookAndFeel();
-
-  void resizeChilderns();
-
-  void resetLookAndFeelChildrens(juce::LookAndFeel* lookandfeel = nullptr);
-
-  void updateYData(const std::vector<std::vector<float>>& y_data,
-                   const GraphAttributeList& graph_attribute_list);
-  void updateXData(const std::vector<std::vector<float>>& x_data);
-
+  /** @internal */
+  template <bool is_point_data_point = false>
+  std::tuple<size_t, const Series *> findNearestPoint(
+      juce::Point<float> point, const Series *series = nullptr);
+  /** @internal */
+  PlotLookAndFeel *getDefaultLookAndFeel();
+  /** @internal */
+  template <SeriesType t_series_type>
+  void addSeriesInternal(std::unique_ptr<Series> &series,
+                         const size_t series_index);
+  /** @internal */
+  void resizeChildrens();
+  /** @internal */
+  void resetLookAndFeelChildrens(juce::LookAndFeel *lookandfeel = nullptr);
+  /** @internal */
+  template <SeriesType t_series_type>
+  void updateSeriesYData(const std::vector<std::vector<float>> &y_data,
+                         const SeriesAttributeList &series_attribute_list);
+  /** @internal */
+  template <SeriesType t_series_type>
+  void updateSeriesXData(const std::vector<std::vector<float>> &x_data);
+  /** @internal */
   void setAutoXScale();
+  /** @internal */
   void setAutoYScale();
+  /** @internal */
+  void updateXLim(const Lim_f &new_x_lim);
+  /** @internal */
+  void updateYLim(const Lim_f &new_y_lim);
+  /** @internal */
+  void addSelectableTracePoints();
+  /** @internal */
+  void setTracePointInternal(const juce::Point<float> &trace_point_coordinate,
+                             bool is_point_data_point);
+  /** @internal Ensure there are exactly 'count' series of the given type,
+   * creating any that are missing. */
+  template <SeriesType t_series_type>
+  void ensureSeriesCount(std::size_t count);
+  /** @internal Copy the given series' data into the plot's components (one
+   * copy each); shared by the plot(SeriesData) and plot(SeriesDataList)
+   * overloads. */
+  void plotSeries(std::span<const SeriesData> series);
+  /** @internal Shared body of the plot overloads. With t_take_ownership the
+   * caller's series are expiring, so their values are moved rather than
+   * copied. */
+  template <bool t_take_ownership>
+  void plotSeriesInternal(
+      std::span<
+          std::conditional_t<t_take_ownership, SeriesData, const SeriesData>>
+          series);
+  /** @internal Whether every series of this type already holds exactly as
+   * many x-values as the matching entry of 'y_data' has y-values. Must be
+   * asked before the y-data is written, since writing it changes the sizes
+   * being compared. */
+  template <SeriesType t_series_type>
+  bool seriesXSizesMatch(
+      const std::vector<std::vector<float>> &y_data) const noexcept;
+  /** @internal */
+  template <SeriesType t_series_type>
+  void plotInternal(const std::vector<std::vector<float>> &y_data,
+                    const std::vector<std::vector<float>> &x_data,
+                    const SeriesAttributeList &series_attributes,
+                    const bool update_y_data_only = false);
+  /** @internal */
+  std::vector<std::vector<float>> generateXdataRamp(
+      const std::vector<std::vector<float>> &y_data);
+  /** @internal */
+  void syncDownsamplingModeWithMoveType();
+  /** @internal */
+  void setDownsamplingTypeInternal(const DownsamplingType downsampling_type);
 
-  void updateXLim(const Lim_f& new_x_lim);
-  void updateYLim(const Lim_f& new_y_lim);
+  /** User input related things  */
+  /** @internal */
+  void mouseHandler(const juce::MouseEvent &event,
+                    const UserInputAction user_input_action);
+  /** @internal */
+  void addOrRemoveTracePoint(const juce::MouseEvent &event);
+  /** @internal */
+  void resetZoom();
+  /** @internal */
+  void setStartPosSelectedRegion(const juce::Point<int> &start_position);
+  /** @internal */
+  void drawSelectedRegion(const juce::Point<int> &end_position);
+  /** @internal */
+  void zoomOnSelectedRegion();
+  /** @internal */
+  void moveTracepoint(const juce::MouseEvent &event);
+  /** @internal */
+  void moveTracepointLabel(const juce::MouseEvent &event);
+  /** @internal */
+  void moveLegend(const juce::MouseEvent &event);
+  /** @internal */
+  void selectedTracePointsWithinSelectedArea();
+  /** @internal */
+  void selectTracePoint(const juce::MouseEvent &event);
+  /** @internal */
+  void deselectTracePoint(const juce::MouseEvent &event);
+  /** @internal */
+  void moveSelectedTracePoints(const juce::MouseEvent &event);
+  /** @internal */
+  void panning(const juce::MouseEvent &event);
 
-  void updateGridGraphsTrace();
-  void updateTracePointsForNewGraphData();
-
-  bool m_x_autoscale = true, m_y_autoscale = true;
+  juce::ComponentDragger m_comp_dragger;
+  juce::Point<float> m_prev_mouse_position{0.f, 0.f};
+  SeriesChangedCallback m_series_changed_callback = nullptr;
+  const juce::ModifierKeys *m_modifiers = nullptr;
 
   /** Common plot parameters. */
-  Scaling m_x_scaling, m_y_scaling;
-  DownsamplingType m_downsampling_type{DownsamplingType::xy_downsampling};
-  juce::Rectangle<int> m_graph_bounds;
-  cmp::Lim<float> m_x_lim, m_y_lim, m_x_lim_default, m_y_lim_default;
+  Observable<Scaling> m_x_scaling, m_y_scaling;
+  Observable<juce::Rectangle<int>> m_axes_bounds;
+  Observable<Lim<float>> m_x_lim, m_y_lim;
+  cmp::Lim<float> m_x_lim_start, m_y_lim_start;
+  Observable<DownsamplingType> m_downsampling_type;
+  Observable<bool> m_notify_components_on_update;
 
-  CommonPlotParameterView m_common_graph_params;
-
-  GraphLines m_graph_lines;
-  GraphSpreadList m_graph_spread_list;
+  /** Child components */
+  SpreadList m_spread_list;
+  std::unique_ptr<SeriesList> m_series;
   std::unique_ptr<Grid> m_grid;
   std::unique_ptr<PlotLabel> m_plot_label;
   std::unique_ptr<Frame> m_frame;
   std::unique_ptr<Legend> m_legend;
-  std::unique_ptr<Zoom> m_zoom;
+  std::unique_ptr<SelectionArea> m_selected_area;
   std::unique_ptr<Trace> m_trace;
 
-  juce::LookAndFeel* m_lookandfeel;
-  std::unique_ptr<LookAndFeelMethods> m_lookandfeel_default;
+  /** Look and feel */
+  PlotLookAndFeel *getPlotLookAndFeel();
+  std::unique_ptr<PlotLookAndFeel> m_lookandfeel_default;
 
-  juce::ComponentDragger m_comp_dragger;
-
-  friend const IsLabelsSet getIsLabelsAreSet(const Plot* plot) noexcept;
-
+  /** Friend functions */
+  friend const AreLabelsSet areLabelsSet(const Plot *plot) noexcept;
   friend const std::pair<int, int> getMaxGridLabelWidth(
-      const Plot* plot) noexcept;
+      const Plot *plot) noexcept;
+
+  /** Other variables */
+  PixelPointMoveType m_pixel_point_move_type{PixelPointMoveType::none};
+  bool m_x_autoscale = true;
+  bool m_y_autoscale = true;
+  bool m_is_panning_or_zoomed_active = false;
 };
 
 /**
- * \class SemiLogX
- * \brief Component for plotting 2-D graph lines where the x-axis is scaled
- *  logarithmic and y-axis linearly.
+ * @class SemiLogX
+ * @brief Plot with logarithmic x-axis and linear y-axis scaling
+ * @details Convenience class that creates a Plot with logarithmic x-axis
+ * scaling. Useful for data that spans multiple orders of magnitude in x.
  */
 class SemiLogX : public Plot {
  public:
@@ -582,9 +674,10 @@ class SemiLogX : public Plot {
 };
 
 /**
- * \class SemiLogY
- * \brief Component for plotting 2-D graph lines where the x-axis is scaled
- *  logarithmic and y-axis linearly.
+ * @class SemiLogY
+ * @brief Plot with linear x-axis and logarithmic y-axis scaling
+ * @details Convenience class that creates a Plot with logarithmic y-axis
+ * scaling. Useful for data that spans multiple orders of magnitude in y.
  */
 class SemiLogY : public Plot {
  public:
@@ -592,14 +685,15 @@ class SemiLogY : public Plot {
 };
 
 /**
- * \class LogLog
- * \brief Component for plotting 2-D graph lines where both the x- and y-axis
- *  are scaled logarithmic.
+ * @class LogLog
+ * @brief Plot with logarithmic scaling on both axes
+ * @details Convenience class that creates a Plot with logarithmic scaling on
+ * both axes. Useful for data that spans multiple orders of magnitude in both
+ * dimensions.
  */
 class LogLog : public Plot {
  public:
   LogLog() : Plot(Scaling::logarithmic, Scaling::logarithmic){};
 };
 
-}  // namespace GIT_VERSION
 }  // namespace cmp

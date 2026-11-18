@@ -7,15 +7,145 @@
 
 #include "cmp_downsampler.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <numeric>
+
 #include "cmp_datamodels.h"
 #include "cmp_utils.h"
-#include <algorithm>
 
 namespace cmp {
-static auto computeXStartIdx(const auto x_min_lim, const auto& x_data) {
+namespace {
+constexpr size_t MIN_POINTS_FOR_DOWNSAMPLING = 100u;
+constexpr size_t MAX_POINTS_PER_PIXEL = 3u;
+constexpr int PADDING_POINTS =
+    2;  // Number of points to add outside visible range
+constexpr bool COMPUTE_ALL_POINTS = false;
+
+template <class FloatType>
+struct MinMaxIndices {
+  size_t min_idx;
+  size_t max_idx;
+  FloatType min_val;
+  FloatType max_val;
+};
+
+template <class FloatType>
+MinMaxIndices<FloatType> findMinMaxIndices(const std::vector<FloatType>& y_data,
+                                           size_t start_idx, size_t end_idx) {
+  MinMaxIndices<FloatType> result{start_idx, start_idx, y_data[start_idx],
+                                  y_data[start_idx]};
+
+  for (auto idx = start_idx + 1; idx < end_idx; ++idx) {
+    auto y_value = y_data[idx];
+    if (y_value < result.min_val) {
+      result.min_val = y_value;
+      result.min_idx = idx;
+    } else if (y_value > result.max_val) {
+      result.max_val = y_value;
+      result.max_idx = idx;
+    }
+  }
+  return result;
+}
+
+template <class ValueType>
+struct XRangeIndices {
+  size_t start_idx;
+  size_t end_idx;
+};
+
+template <class ValueType>
+XRangeIndices<ValueType> findDataRange(const ValueType x_min_lim,
+                                       const ValueType x_max_lim,
+                                       const std::vector<ValueType>& x_data) {
+  if (x_data.empty()) {
+    return {0u, 0u};
+  }
+
+  // Find start index, ensuring we don't underflow
+  const auto raw_start =
+      std::distance(x_data.begin(),
+                    std::lower_bound(x_data.begin(), x_data.end(), x_min_lim));
+  const auto padded_start =
+      std::max(0L, static_cast<long>(raw_start - PADDING_POINTS));
+  const auto start_idx = static_cast<size_t>(padded_start);
+
+  // Find end index, ensuring we don't overflow
+  const auto raw_end =
+      std::distance(x_data.begin(),
+                    std::upper_bound(x_data.begin(), x_data.end(), x_max_lim));
+  const auto max_size = static_cast<long>(x_data.size() - 1);
+  const auto padded_end =
+      std::min(max_size, static_cast<long>(raw_end + PADDING_POINTS));
+  const auto end_idx = static_cast<size_t>(padded_end);
+
+  return XRangeIndices<ValueType>{start_idx, end_idx};
+}
+
+template <class ValueType>
+bool shouldAddPoint(const ValueType current_value, const ValueType last_value,
+                    const ValueType min_distance,
+                    const ValueType prev_difference,
+                    const ValueType current_difference) {
+  // Add point if direction changes or distance exceeds threshold
+  const bool direction_changed =
+      (std::signbit(prev_difference) != std::signbit(current_difference));
+  const bool exceeds_distance =
+      (std::abs(last_value - current_value) > min_distance);
+  return direction_changed || exceeds_distance;
+}
+
+template <class FloatType>
+struct PixelColumnData {
+  std::vector<size_t> indices;
+  FloatType min_val;
+  FloatType max_val;
+  size_t min_idx;
+  size_t max_idx;
+};
+
+template <class FloatType>
+void processPixelColumn(const std::vector<FloatType>& y_data, size_t start_idx,
+                        size_t end_idx, fast_vector<std::size_t>& xy_indices) {
+  if (end_idx - start_idx <= MAX_POINTS_PER_PIXEL) {
+    // For small segments, include all points
+    for (auto i = start_idx; i < end_idx; ++i) {
+      xy_indices.push_back(i);
+    }
+    return;
+  }
+
+  // Find min/max points in this column
+  auto [min_idx, max_idx, min_val, max_val] =
+      findMinMaxIndices(y_data, start_idx, end_idx);
+
+  // Always include the start point
+  xy_indices.push_back(start_idx);
+
+  // Add min/max points in order of appearance
+  if (min_idx < max_idx) {
+    xy_indices.push_back_if_not_in_back(min_idx);
+    xy_indices.push_back_if_not_in_back(max_idx);
+  } else {
+    xy_indices.push_back_if_not_in_back(max_idx);
+    xy_indices.push_back_if_not_in_back(min_idx);
+  }
+
+  // Include end point if it's significant
+  if (end_idx - 1 != max_idx && end_idx - 1 != min_idx) {
+    xy_indices.push_back_if_not_in_back(end_idx - 1);
+  }
+}
+}  // namespace
+
+template <class ValueType>
+static auto computeXStartIdx(const ValueType x_min_lim,
+                             const std::vector<ValueType>& x_data) {
   int start_x_index{0};
 
-  // The points that are on top of each other or outside the graph area are
+  // The points that are on top of each other or outside the axes area are
   // dicarded.
   for (const auto& x : x_data) {
     if (x >= x_min_lim) {
@@ -40,8 +170,10 @@ static auto computeXStartIdx(const auto x_min_lim, const auto& x_data) {
   return start_x_index;
 }
 
-static auto computeXEndIdx(const auto x_max_lim, const auto& x_data) {
-  std::size_t end_x_index{x_data.size() - 1};
+template <class ValueType>
+static auto computeXEndIdx(const ValueType x_max_lim,
+                           const std::vector<ValueType>& x_data) {
+  int end_x_index{int(x_data.size() - 1)};
 
   for (auto x = x_data.rbegin(); x != x_data.rend(); ++x) {
     if (*x <= x_max_lim || end_x_index == 0u) {
@@ -62,166 +194,190 @@ static auto computeXEndIdx(const auto x_max_lim, const auto& x_data) {
   return end_x_index;
 }
 
-static auto calculateXIdxsBetweenStartEnd(const auto start_x_idx,
-                                          const auto end_x_idx,
-                                          const auto common_params,
-                                          const auto& x_data, auto& x_idx) {
+template <class ValueType, class IndexType, class ForwardIt>
+static auto calculateXIndicesBetweenStartEnd(
+    const ForwardIt start_x_idx, const ForwardIt end_x_idx,
+    const Scaling x_scaling, const Lim<ValueType> x_lim,
+    const juce::Rectangle<int>& axes_bounds,
+    const std::vector<ValueType>& x_data,
+    std::vector<IndexType>& x_based_idxs_out) {
   const auto [x_scale, x_offset] =
-      getXScaleAndOffset(float(common_params.graph_bounds.getWidth()),
-                         common_params.x_lim, common_params.x_scaling);
+      getXScaleAndOffset(float(axes_bounds.getWidth()), x_lim, x_scaling);
 
-  float last_added_x = std::numeric_limits<float>::min();
+  float last_added_x = x_data[start_x_idx];
   std::size_t current_index = start_x_idx;
-  std::size_t graph_point_index{0u};
-  const auto inverse_x_scale = 1.f / x_scale;
+  std::size_t pixel_point_index{1u};
+  const auto inverse_x_scale = 1.0f / x_scale;
+  auto last_x_diff = 0.f;
 
-  if (common_params.x_scaling == Scaling::linear) {
-    for (auto x = x_data.begin() + start_x_idx; x != x_data.begin() + end_x_idx;
-         ++x) {
-      if (abs(*x - last_added_x) > inverse_x_scale) {
-        last_added_x = *x;
-        x_idx[graph_point_index++] = current_index;
+  if (x_scaling == Scaling::linear) {
+    for (auto i = current_index; i < end_x_idx; ++i) {
+      const auto current_x_diff = i > 0 ? x_data[i - 1] - x_data[i] : 0.f;
+
+      // If the x values suddenly go opposite, we need to add that value.
+      const auto force_add_x =
+          (std::signbit(last_x_diff) != std::signbit(current_x_diff));
+      last_x_diff = current_x_diff;
+
+      if (force_add_x ||
+          (std::abs(last_added_x - x_data[i])) > inverse_x_scale) {
+        last_added_x = x_data[i];
+        x_based_idxs_out[pixel_point_index++] = i;
       }
-      current_index++;
     }
-  } else if (common_params.x_scaling == Scaling::logarithmic) {
+  } else if (x_scaling == Scaling::logarithmic) {
     for (auto x = x_data.begin() + start_x_idx; x != x_data.begin() + end_x_idx;
          ++x) {
-      if (log10(abs(*x / last_added_x)) > inverse_x_scale) {
+      if (std::log10(std::abs(*x / last_added_x)) > inverse_x_scale) {
         last_added_x = *x;
-        x_idx[graph_point_index++] = current_index;
+        x_based_idxs_out[pixel_point_index++] = current_index;
       }
       current_index++;
     }
   }
 
-  const auto x_idxs_size_required = graph_point_index + 1;
+  const auto x_idxs_size_required = pixel_point_index + 1;
   return x_idxs_size_required;
 }
 
 template <class FloatType>
-void Downsampler<FloatType>::calculateXBasedDSIdxs(
-    const CommonPlotParameterView common_params,
+void Downsampler<FloatType>::calculateXIndices(
+    const Scaling x_scaling, const Lim<FloatType> x_lim,
+    const juce::Rectangle<int>& axes_bounds,
     const std::vector<FloatType>& x_data,
-    std::vector<std::size_t>& x_based_ds_idxs) {
-  x_based_ds_idxs.resize(x_data.size());
-
-  const auto& bounds = common_params.graph_bounds;
-  const auto& x_lim = common_params.x_lim;
-
-  std::size_t max_x_index{x_data.size() - 1u};
-
-  // If the graph has less than 10 values we simply plot all points even if
-  // they are on top of each other.
-  if (x_data.size() < 10u) {
-    std::iota(x_based_ds_idxs.begin(), x_based_ds_idxs.end(), 0u);
+    std::vector<std::size_t>& x_based_idxs_out) {
+  if (x_data.empty()) {
+    x_based_idxs_out.clear();
     return;
   }
 
-  const auto start_x_index = computeXStartIdx(x_lim.min, x_data);
+  x_based_idxs_out.resize(x_data.size());
 
-  const auto end_x_index = computeXEndIdx(x_lim.max, x_data);
-
-  x_based_ds_idxs.front() = start_x_index;
-
-  const auto x_idxs_size_required = calculateXIdxsBetweenStartEnd(
-      start_x_index, end_x_index, common_params, x_data, x_based_ds_idxs);
-
-  x_based_ds_idxs.resize(x_idxs_size_required);
-
-  x_based_ds_idxs.back() = end_x_index;
-}
-
-template <class FloatType>
-void Downsampler<FloatType>::calculateXYBasedDSIdxs(
-    const CommonPlotParameterView common_params,
-    const std::vector<std::size_t>& x_based_ds_idxs,
-    const std::vector<FloatType>& y_data,
-    std::vector<std::size_t>& xy_based_ds_idxs) {
-  if (x_based_ds_idxs.empty()) return;
-
-  xy_based_ds_idxs.resize(y_data.size());
-
-  // If the graph has less than 10 values we simply plot all points.
-  if (xy_based_ds_idxs.size() < 10u) {
-    xy_based_ds_idxs = x_based_ds_idxs;
+  // Handle small datasets without downsampling
+  if (x_data.size() < MIN_POINTS_FOR_DOWNSAMPLING) {
+    std::iota(x_based_idxs_out.begin(), x_based_idxs_out.end(), 0u);
+    return;
   }
 
-  auto xy_i = 0u;
-  auto xy_size = 0u;
+  // Find visible data range
+  const auto range = findDataRange(x_lim.min, x_lim.max, x_data);
 
-  for (auto i = x_based_ds_idxs.begin();; ++i) {
-    // We have reached the last x-based ds index. Let's add it.
-    if (i + 1 == x_based_ds_idxs.end()) UNLIKELY {
-        xy_based_ds_idxs[xy_i++] = *i;
+  // Set initial point
+  x_based_idxs_out[0] = range.start_idx;
 
-        xy_size += 1;
+  // Calculate scale factors
+  const auto [scale, offset] =
+      getXScaleAndOffset(float(axes_bounds.getWidth()), x_lim, x_scaling);
+  const auto inverse_scale = 1.0f / scale;
 
-        break;
+  size_t output_idx = 1;
+  float last_added_x = x_data[range.start_idx];
+  float last_diff = 0.f;
+
+  // Process points based on scaling type
+  if (x_scaling == Scaling::linear) {
+    for (size_t i = range.start_idx + 1; i < range.end_idx; ++i) {
+      const auto current_diff = i > 0 ? x_data[i - 1] - x_data[i] : 0.f;
+
+      if (shouldAddPoint(x_data[i], last_added_x, inverse_scale, last_diff,
+                         current_diff)) {
+        last_added_x = x_data[i];
+        x_based_idxs_out[output_idx++] = i;
       }
 
-    // Add the current x-based ds index.
-    xy_based_ds_idxs[xy_i++] = *i;
-
-    // Calculated the index diff between the current and the next x-based ds
-    // index.
-    const auto index_diff = *(i + 1) - *i;
-
-    if (index_diff == 2u) {
-      xy_based_ds_idxs[xy_i++] = *i + 1;
-
-      xy_size += 2;
-    } else if (index_diff == 3u) {
-      xy_based_ds_idxs[xy_i++] = *i + 1;
-      xy_based_ds_idxs[xy_i++] = *i + 2;
-
-      xy_size += 3;
-
-      // Let's find the min and max y-value that share the same x-pixel and get
-      // their indices.
-    } else if (index_diff > 3u) {
-      auto j = *i + 1;
-
-      auto max_val = y_data[j];
-      auto min_val = y_data[j];
-      auto max_idx = j;
-      auto min_idx = j;
-      auto min_last = true;
-
-      for (; j < *(i + 1); ++j) {
-        auto y = y_data[j];
-
-        if (y < min_val) {
-          min_val = y;
-
-          min_idx = j;
-
-          min_last = true;
-        } else if (y > max_val) {
-          max_val = y;
-
-          max_idx = j;
-
-          min_last = false;
-        }
+      last_diff = current_diff;
+    }
+  } else if (x_scaling == Scaling::logarithmic) {
+    for (size_t i = range.start_idx + 1; i < range.end_idx; ++i) {
+      if (std::log10(std::abs(x_data[i] / last_added_x)) > inverse_scale) {
+        last_added_x = x_data[i];
+        x_based_idxs_out[output_idx++] = i;
       }
-
-      // Make sure that we att the indices in the correct order.
-      if (min_last) {
-        xy_based_ds_idxs[xy_i++] = max_idx;
-        xy_based_ds_idxs[xy_i++] = min_idx;
-      } else {
-        xy_based_ds_idxs[xy_i++] = min_idx;
-        xy_based_ds_idxs[xy_i++] = max_idx;
-      }
-
-      xy_size += 3;
-    } else {
-      xy_size += 1;
     }
   }
 
-  xy_based_ds_idxs.resize(xy_size);
+  // Add final point and resize
+  x_based_idxs_out[output_idx++] = range.end_idx;
+  x_based_idxs_out.resize(output_idx);
+}
+
+template <class FloatType>
+void Downsampler<FloatType>::calculateXYBasedIdxs(
+    const std::vector<std::size_t>& x_indices,
+    const std::vector<FloatType>& y_data,
+    std::vector<std::size_t>& xy_indices_out) {
+  if (x_indices.empty()) {
+    xy_indices_out.clear();
+    return;
+  }
+
+  fast_vector<std::size_t> xy_indices(xy_indices_out, y_data.size());
+
+  if (y_data.size() < MIN_POINTS_FOR_DOWNSAMPLING) {
+    xy_indices = x_indices;
+    xy_indices_out = xy_indices.get();
+    return;
+  }
+
+  // Process each segment between x-indices
+  for (auto i_it = x_indices.begin(); std::next(i_it) != x_indices.end();
+       ++i_it) {
+    const auto start_idx = *i_it;
+    const auto end_idx = *std::next(i_it);
+
+    processPixelColumn(y_data, start_idx, end_idx, xy_indices);
+  }
+
+  // Ensure the last point is included
+  if (!x_indices.empty()) {
+    xy_indices.push_back_if_not_in_back(x_indices.back());
+  }
+
+  // Transfer results back to output vector
+  xy_indices_out = xy_indices.get();
+}
+
+template <class FloatType>
+void Downsampler<FloatType>::calculatePixelBasedIdxs(
+    const PixelPoints& pixel_points, std::vector<std::size_t>& idxs_out) {
+  if (pixel_points.empty()) {
+    idxs_out.clear();
+    return;
+  }
+
+  // Handle small datasets without downsampling.
+  if (pixel_points.size() < MIN_POINTS_FOR_DOWNSAMPLING) {
+    idxs_out.resize(pixel_points.size());
+    std::iota(idxs_out.begin(), idxs_out.end(), 0u);
+    return;
+  }
+
+  idxs_out.clear();
+  idxs_out.reserve(pixel_points.size());
+
+  // The first point is always kept, and seeds the pixel being compared
+  // against.
+  idxs_out.push_back(0u);
+
+  auto last_x = std::lround(pixel_points.front().getX());
+  auto last_y = std::lround(pixel_points.front().getY());
+
+  // Dropping a point that shares a pixel with its predecessor only removes a
+  // sub-pixel line segment, so the drawn path is unchanged.
+  for (std::size_t i = 1; i < pixel_points.size() - 1u; ++i) {
+    const auto x = std::lround(pixel_points[i].getX());
+    const auto y = std::lround(pixel_points[i].getY());
+
+    if (x != last_x || y != last_y) {
+      idxs_out.push_back(i);
+
+      last_x = x;
+      last_y = y;
+    }
+  }
+
+  // The last point is always kept, so the path still ends where the data does.
+  idxs_out.push_back(pixel_points.size() - 1u);
 }
 
 template class Downsampler<float>;

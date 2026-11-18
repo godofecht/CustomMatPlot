@@ -5,7 +5,7 @@
  * https://opensource.org/licenses/MIT
  */
 
-/*
+/**
  * @file cmp_downsampler.h
  *
  * @brief Class to downsample data before its being plotted to save cpu.
@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "cmp_datamodels.h"
+#include <cmp_datamodels.h>
 
 namespace cmp {
 
@@ -35,37 +35,56 @@ class Downsampler {
  public:
   /** @brief Calculate x-based downsample indices
    *
-   * Calculate ds indices based on the x_data, x_lims and the graph_bounds. The
+   * Calculate ds indices based on the x_data, x_lims and the axes_bounds. The
    * output indices is used to get the x/y-data to only plot one value per
    * x-pixel. If several x/y-points share the same x-pixel value, the first
    * index is stored whereas the following indices are discarded until next
    * x-pixel is reached.
    *
-   *  @param common_params common plot parameters.
+   *  @param x_scaling the x-scaling.
+   *  @param x_lim the x-limits.
+   *  @param axes_bounds the axes bounds.
    *  @param x_data the x_data to be plotted.
-   *  @param x_based_ds_idxs the output x-indices.
+   *  @param x_based_idxs_out the output x-indices.
    *  @return void.
    */
-  static void calculateXBasedDSIdxs(const CommonPlotParameterView common_params,
-                                    const std::vector<FloatType> &x_data,
-                                    std::vector<std::size_t> &x_idxs);
+  static void calculateXIndices(const Scaling x_scaling,
+                                const Lim<FloatType> x_lim,
+                                const juce::Rectangle<int> &axes_bounds,
+                                const std::vector<FloatType> &x_data,
+                                std::vector<std::size_t> &x_idxs);
 
   /** @brief Calculate xy-indices
    *
    * Calculate the indices that can be used to get the data_points to be
    * plotted without loosing any resolution in the plot. Calculate xy-indices
-   * based on the y_data, y_lims, graph_bounds and the pre-calculated x-indices
+   * based on the y_data, y_lims, axes_bounds and the pre-calculated x-indices
    * @see calculateXIdxs.
    *
-   *  @param common_params common plot parameters.
    *  @param x_idxs the x-indices calculated in @see CalculateXIdxs.
    *  @param y_data the y_data to be plotted.
-   *  @param xy_based_ds_idxs indices used to downsample the data.
+   *  @param xy_based_idxs_out indices used to downsample the data.
    *  @return void.
    */
-  static void calculateXYBasedDSIdxs(
-      const CommonPlotParameterView common_params,
-      const std::vector<std::size_t> &x_idxs,
-      const std::vector<FloatType> &y_data, std::vector<std::size_t> &xy_idxs);
+  static void calculateXYBasedIdxs(const std::vector<std::size_t> &x_idxs,
+                                   const std::vector<FloatType> &y_data,
+                                   std::vector<std::size_t> &xy_idxs);
+
+  /** @brief Calculate downsample indices from already-projected pixel points.
+   *
+   * Keeps a point whenever it lands on a different pixel than the last kept
+   * point, so runs of points sharing a pixel collapse into one. The first and
+   * last points are always kept.
+   *
+   * Unlike @see calculateXIndices, this works in screen space and makes no
+   * assumption that the points are sorted along either axis, so it suits
+   * projected 3D curves that double back on themselves.
+   *
+   *  @param pixel_points the already-projected pixel points.
+   *  @param idxs_out the output indices into 'pixel_points'.
+   *  @return void.
+   */
+  static void calculatePixelBasedIdxs(const PixelPoints &pixel_points,
+                                      std::vector<std::size_t> &idxs_out);
 };
 }  // namespace cmp

@@ -1,6 +1,6 @@
 /**
  * Copyright (c) 2022 Frans Rosencrantz
- * 
+ *
  * This software is released under the MIT License.
  * https://opensource.org/licenses/MIT
  */
@@ -21,7 +21,7 @@ class ticks : public juce::Component {
     addAndMakeVisible(m_plot);
 
     // Plot some values.
-    m_plot.plot({{1, 3, 7, 9, 13}});
+    m_plot.plot({.y = {1, 3, 7, 9, 13}});
 
     // Set ticks and tick-labals.
     m_plot.setXTicks({1.7f, 2.0f, 3.23f});

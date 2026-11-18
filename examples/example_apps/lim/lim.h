@@ -1,6 +1,6 @@
 /**
  * Copyright (c) 2022 Frans Rosencrantz
- * 
+ *
  * This software is released under the MIT License.
  * https://opensource.org/licenses/MIT
  */
@@ -22,11 +22,11 @@ class lim : public juce::Component {
     addAndMakeVisible(m_plot);
 
     // Plot some values.
-    m_plot.plot({{15, 3, 7, 9, 13}});
+    m_plot.plot({.y = {15, 3, 7, 9, 13}});
 
     // Set x and y limits
-    m_plot.xLim(-1.0f, 3.4f);
-    m_plot.yLim(3.14f, 42.0f);
+    m_plot.setXLim(-1.0f, 3.4f);
+    m_plot.setYLim(3.14f, 42.0f);
   };
 
   void resized() override {

@@ -1,6 +1,6 @@
 /**
  * Copyright (c) 2022 Frans Rosencrantz
- * 
+ *
  * This software is released under the MIT License.
  * https://opensource.org/licenses/MIT
  */
@@ -27,7 +27,7 @@ namespace cmp {
  * \class Frame
  * \brief A class for creating a frame
  *
- * The idea is to use this componenet to draw the frame around the graph area
+ * The idea is to use this componenet to draw the frame around the axes area
  */
 class Frame : public juce::Component {
  public:

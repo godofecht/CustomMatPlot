@@ -1,6 +1,6 @@
 /**
  * Copyright (c) 2022 Frans Rosencrantz
- * 
+ *
  * This software is released under the MIT License.
  * https://opensource.org/licenses/MIT
  */
@@ -34,20 +34,16 @@ void PlotLabel::setTitle(const std::string &title) {
   updateLabels();
 }
 
-const juce::Label &PlotLabel::getXLabel() const noexcept {
-  return m_x_label;
-}
+const juce::Label &PlotLabel::getXLabel() const noexcept { return m_x_label; }
 
-const juce::Label &PlotLabel::getYLabel() const noexcept {
-  return m_y_label;
-}
+const juce::Label &PlotLabel::getYLabel() const noexcept { return m_y_label; }
 
 const juce::Label &PlotLabel::getTitleLabel() const noexcept {
   return m_title_label;
 }
 
-const IsLabelsSet PlotLabel::getIsLabelsAreSet() const noexcept {
-  return IsLabelsSet{
+const AreLabelsSet PlotLabel::areLabelsSet() const noexcept {
+  return AreLabelsSet{
       m_x_label.getText().isNotEmpty(),
       m_y_label.getText().isNotEmpty(),
       m_title_label.getText().isNotEmpty(),
@@ -57,11 +53,10 @@ const IsLabelsSet PlotLabel::getIsLabelsAreSet() const noexcept {
 void PlotLabel::resized() { updateLabels(); }
 
 void PlotLabel::updateLabels() {
-  if (m_lookandfeel) {
-    auto lnf = static_cast<Plot::LookAndFeelMethods *>(m_lookandfeel);
-    const auto graph_bounds =
-        lnf->getGraphBounds(getBounds(), getParentComponent());
-    lnf->updateXYTitleLabels(getBounds(), graph_bounds, m_x_label, m_y_label,
+  if (auto *lnf = dynamic_cast<Plot::LookAndFeelMethods *>(&getLookAndFeel())) {
+    const auto axes_bounds =
+        lnf->getAxesBounds(getBounds(), getParentComponent());
+    lnf->updateXYTitleLabels(getBounds(), axes_bounds, m_x_label, m_y_label,
                              m_title_label);
   }
 }
@@ -71,6 +66,7 @@ void PlotLabel::paint(juce::Graphics &g) {}
 void PlotLabel::lookAndFeelChanged() {
   if (auto *lnf = dynamic_cast<Plot::LookAndFeelMethods *>(&getLookAndFeel())) {
     m_lookandfeel = lnf;
+    updateLabels();
   } else {
     m_lookandfeel = nullptr;
   }

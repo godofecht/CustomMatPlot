@@ -1,6 +1,6 @@
 /**
  * Copyright (c) 2022 Frans Rosencrantz
- * 
+ *
  * This software is released under the MIT License.
  * https://opensource.org/licenses/MIT
  */
@@ -39,23 +39,31 @@ class Legend : public juce::Component {
    *  @param label_texts the text to be displayed for each data series
    *  @return void.
    */
-  void setLegend(const StringVector& graph_descriptions);
+  void setLegend(const StringVector &series_descriptions);
+
+  /** @brief Set SeriesVector
+   *
+   * Set the SeriesVector to be used for the legend.
+   *
+   * @param SeriesVector* series in the plot.
+   * @return void.
+   */
+  void setSeries(const SeriesVector &series);
 
   /** @breif Update legends
    *
-   * Update the legends based on info from the graph_lines.
-   * The legend descriptions are resized based on the graph_lines size.
-   * The colour of the graph_line is displayed before the description text.
+   * Update the legends based on info from the series.
+   * The legend descriptions are resized based on the series size.
+   * The colour of the series is displayed before the description text.
    *
-   * @param GraphLines* graph_lines in the plot.
    * @return void.
    */
-  void updateLegends(const GraphLines& graph_lines);
+  void update();
 
   /** @internal */
   void resized() override;
   /** @internal */
-  void paint(juce::Graphics& g) override;
+  void paint(juce::Graphics &g) override;
   /** @internal */
   void lookAndFeelChanged() override;
 
@@ -66,14 +74,16 @@ class Legend : public juce::Component {
    * @param StringVector the descriptions that will be drawn.
    * @return void.
    */
-  std::function<void(const StringVector&)> onNumberOfDescriptionsChanged{nullptr};
+  std::function<void(const StringVector &)> onNumberOfDescriptionsChanged{
+      nullptr};
 
  private:
-  juce::LookAndFeel* m_lookandfeel;
+  juce::LookAndFeel *m_lookandfeel;
 
   std::vector<LegendLabel> m_legend_labels;
   std::vector<std::string> m_label_texts;
 
   bool m_label_texts_is_changed{false};
+  const SeriesVector *m_series{nullptr};
 };
 }  // namespace cmp

@@ -1,0 +1,391 @@
+/**
+ * Copyright (c) 2022 Frans Rosencrantz
+ *
+ * This software is released under the MIT License.
+ * https://opensource.org/licenses/MIT
+ */
+
+/**
+ * @file cmp_series.h
+ *
+ * @brief Componenets for drawing series.
+ *
+ * @ingroup CustomMatPlotInternal
+ *
+ * @author Frans Rosencrantz
+ * Contact: Frans.Rosencrantz@gmail.com
+ *
+ */
+
+#pragma once
+
+#include <juce_gui_basics/juce_gui_basics.h>
+
+#include <cstddef>
+#include <span>
+
+#include "cmp_datamodels.h"
+#include "cmp_utils.h"
+
+namespace cmp {
+
+/**
+ *  \class Series
+ *  \brief A class component to draw 2-D lines/marker symbols. This is
+ *  a subcomponenet to cmp::Plot.
+ */
+class Series : public juce::Component,
+               public virtual Observer<Scaling>,
+               public virtual Observer<Lim<float>>,
+               public virtual Observer<juce::Rectangle<int>>,
+               public virtual Observer<DownsamplingType>,
+               public virtual Observer<bool> {
+ public:
+  /** @brief Find closest point on series from pixel point.
+   *
+   * @param this_pixel_point the point on the series.
+   * @param check_only_distance_from_x check the absolut distance if false else
+   * only the x distance.
+   * @return {closest point on series, closest data point value, data point
+   * index}
+   */
+  std::tuple<juce::Point<float>, juce::Point<float>, size_t>
+  findClosestPixelPointTo(const juce::Point<float>& this_pixel_point,
+                          bool check_only_distance_from_x = false) const;
+
+  /** @brief Find closest data point to this data point.
+   *
+   * @param this_data_point the data point.
+   * @param check_only_distance_from_x check the absolut distance if false else
+   * only the x distance.
+   * @param only_visible_data_points find the nearest visible data point if
+   * true.
+   * @return closest data point value to this_data_point and the data point
+   * index.
+   */
+  std::pair<juce::Point<float>, size_t> findClosestDataPointTo(
+      const juce::Point<float>& this_data_point,
+      bool check_only_distance_from_x = false,
+      bool only_visible_data_points = true) const;
+
+  /** @brief Get data point for a pixel point index.
+   *
+   *  @param pixel_point_index the pixel point index.
+   *  @return the data point.
+   */
+  juce::Point<float> getDataPointFromPixelPointIndex(
+      size_t pixel_point_index) const;
+
+  /** @brief Get data point for a pixel point index.
+   *
+   *  @param data_point_index the pixel point index.
+   *  @return the data point.
+   */
+  juce::Point<float> getDataPointFromDataPointIndex(
+      size_t data_point_index) const;
+
+  /** @brief Get the colour of the series.
+   *
+   *  @param series_colour the colour of the series
+   *  @return void.
+   */
+  juce::Colour getColour() const noexcept;
+
+  /** @brief Set the series attributes.
+   *
+   *  @see SeriesAttribute.
+   *
+   *  @param series_attributes the series_attributes.
+   *  @return void.
+   */
+  void setSeriesAttribute(const SeriesAttribute& series_attribute);
+
+  /** @brief Get the series attributes.
+   *
+   *  @see SeriesAttribute.
+   *
+   *  @return the series_attributes.
+   */
+  const SeriesAttribute& getSeriesAttribute() const noexcept;
+
+  /** @brief Set the indices to update.
+   *
+   * @param indices the indices to update.
+   * @return void.
+   */
+  void setIndicesToUpdate(const std::vector<std::size_t> indices);
+
+  /** @brief Set the y-values for the series
+   *
+   *  Takes a span so any contiguous range can be copied in without first
+   *  being packed into a vector.
+   *
+   *  @param y_values the y-values.
+   *  @return void.
+   */
+  void setYValues(std::span<const float> y_values);
+
+  /** @brief Take the y-values from an expiring vector.
+   *
+   *  Steals the storage instead of copying into the existing buffer, for
+   *  callers handing over values they no longer need.
+   *
+   *  @param y_values the y-values to take.
+   *  @return void.
+   */
+  void setYValues(std::vector<float>&& y_values);
+
+  /** @brief Set the x-values for the series
+   *
+   *  @param x_values the x-values.
+   *  @return void.
+   */
+  void setXValues(std::span<const float> x_values);
+
+  /** @brief Take the x-values from an expiring vector.
+   *
+   *  @param x_values the x-values to take.
+   *  @return void.
+   */
+  void setXValues(std::vector<float>&& x_values);
+
+  /** @brief Set a single x/y value for the series
+   *
+   *  @param juce::Point<float> the x/y value.
+   *  @param index the index of the x/y value.
+   *  @return boolean if the index is valid.
+   */
+  bool setXYValue(const juce::Point<float>& xy_value, size_t index);
+
+  /** @brief Get y-values
+   *
+   *  Get a const reference of the y-values.
+   *
+   *  @return a const reference of the y-values.
+   */
+  const std::vector<float>& getYData() const noexcept;
+
+  /** @brief Get x-values
+   *
+   *  Get a const reference of the x-values.
+   *
+   *  @return a const reference of the x-values.
+   */
+  const std::vector<float>& getXData() const noexcept;
+
+  /** @brief Get the pixel points
+   *
+   *  Get a const reference of the calculated pixel points.
+   *
+   *  @return const reference of the calculated pixel points.
+   */
+  const PixelPoints& getPixelPoints() const noexcept;
+
+  /* @brief Get the pixel point indices
+   *
+   *  Get a const reference of the calculated pixel point indices.
+   *
+   *  @return const reference of the calculated pixel point indices.
+   */
+  const std::vector<size_t>& getPixelPointIndices() const noexcept;
+
+  /** @brief Set the colour of series
+   *
+   *  Set the colour of series.
+   *
+   *  @param series_colour the colour of the series
+   *  @return void.
+   */
+  void setColour(const juce::Colour series_colour);
+
+  /** @brief Update the pixel points indices x-value in the pixel points.
+   *
+   *  This function updates the pixel points if any new parameter is set. Should
+   *  be called after an parameter changed to update the series. However, call
+   *  updateXY() if the min/max x/y-limits are move equally.
+   *
+   *  @return void.
+   */
+  void updateX();
+
+  /** @brief Update the pixel points indices and y-value in the pixel points.
+   *
+   *  This function updates the pixel points if any new parameter is set. Should
+   *  be called after an parameter changed to update the series. However, call
+   *  updateXY() if the min/max x/y-limits are move equally.
+   *
+   *  @return void.
+   */
+  void updateY();
+
+  /** @brief move pixel point in series
+   *
+   * @param d_pixel_point the delta pixel point.
+   * @param pixel_point_index the pixel point index.
+   * @return void.
+   */
+  void movePixelPoint(const juce::Point<float>& d_pixel_point,
+                      size_t pixel_point_index);
+
+  /** @brief Update the y/x-value in the pixel points.
+   *
+   *  This function updates the pixel points if any new parameter is set.
+   *
+   *  @note updateX() and updateY()
+   *  must have been called anytime before this function.
+   *
+   *  @param update_only_these_indices only update these indices.
+   *  @return void.
+   */
+  void updateXY();
+
+  /** @brief Set Series type
+   *
+   * Set the type of Series. @see SeriesType.
+   *
+   * @param series_type the type of Series.
+   * @return void.
+   */
+  void setType(const SeriesType series_type);
+
+  /** @brief Get Series type
+   *
+   * Get the type of Series. @see SeriesType.
+   *
+   * @return the type of Series.
+   */
+  SeriesType getType() const noexcept;
+
+  /** @brief Observer function for scaling.
+   *
+   * @param id the id of the observer.
+   * @param new_value the new value of the observer.
+   * @return void.
+   */
+  void observableValueUpdated(ObserverId id, const Scaling& new_value) override;
+
+  /** @brief Observer function for x/y-limits.
+   *
+   * @param id the id of the observer.
+   * @param new_value the new value of the observer.
+   * @return void.
+   */
+  void observableValueUpdated(ObserverId id,
+                              const Lim<float>& new_value) override;
+
+  /** @brief Observer function for axes bounds.
+   *
+   * @param id the id of the observer.
+   * @param new_value the new value of the observer.
+   * @return void.
+   */
+  void observableValueUpdated(ObserverId id,
+                              const juce::Rectangle<int>& new_value) override;
+
+  /** @brief Observer function for downsampling type.
+   *
+   * @param id the id of the observer.
+   * @param new_value the new value of the observer.
+   * @return void.
+   */
+  void observableValueUpdated(ObserverId id,
+                              const DownsamplingType& new_value) override;
+
+  /** @brief Observer function for notify components on update.
+   *
+   * @param id the id of the observer.
+   * @param new_value the new value of the observer.
+   * @return void.
+   */
+  void observableValueUpdated(ObserverId id, const bool& new_value) override;
+
+  //==============================================================================
+
+  /** @internal */
+  void resized() override;
+  /** @internal */
+  void paint(juce::Graphics& g) override;
+  /** @internal */
+  void lookAndFeelChanged() override;
+
+ private:
+  void updateYIndicesAndPixelPointsIntern(
+      const std::vector<size_t>& update_only_these_indices);
+  void updateXIndicesAndPixelPointsIntern(
+      const std::vector<size_t>& update_only_these_indices);
+
+  std::vector<float> m_x_data, m_y_data;
+  std::vector<std::size_t> m_x_based_ds_indices, m_xy_indices,
+      m_indices_to_update;
+  PixelPoints m_pixel_points;
+  SeriesType m_series_type{SeriesType::normal};
+
+  Scaling m_x_scaling, m_y_scaling;
+  Lim<float> m_x_lim, m_y_lim;
+  juce::Rectangle<int> m_axes_bounds;
+  DownsamplingType m_downsampling_type{DownsamplingType::xy_downsampling};
+  juce::LookAndFeel* m_lookandfeel{nullptr};
+  SeriesAttribute m_series_attributes;
+};
+
+/**
+ *  \struct SeriesList
+ *  \brief a class to hold a list of series.
+ */
+struct SeriesList : public std::vector<std::unique_ptr<Series>> {
+  /** @brief Get the number of series for a specific type.
+   *
+   * @tparam t_series_type the type of series.
+   * @return the number of series.
+   */
+  template <SeriesType t_series_type>
+  size_t size() const noexcept;
+
+  /** @brief Resize the number of series for a specific type.
+   *
+   * @tparam t_series_type the type of series.
+   * @param new_size the new size of the series list.
+   * @return void.
+   */
+  template <SeriesType t_series_type>
+  void resize(size_t new_size);
+
+ private:
+  /** @internal */
+  template <SeriesType t_series_type>
+  std::vector<Series*> getSeriesOfType();
+};
+
+/**
+ *  \struct Spread
+ *  \brief a class to fill the area between two series.
+ */
+struct Spread : public juce::Component {
+  /**@brief Set the upper and lower bounds of the spread to be drawn.
+   *
+   * @param upper_bound series that decribes the upper boundary.
+   * @param lower_bound series that decribes the lower boundary.
+   */
+  Spread(const Series* upper_bound, const Series* lower_bound,
+         const juce::Colour spread_colour)
+      : m_upper_bound{upper_bound},
+        m_lower_bound{lower_bound},
+        m_spread_colour{spread_colour} {}
+
+  const Series *m_upper_bound, *m_lower_bound;
+  juce::Colour m_spread_colour;
+
+ private:
+  juce::LookAndFeel* m_lookandfeel{nullptr};
+
+  /** @internal */
+  void resized() override;
+  /** @internal */
+  void paint(juce::Graphics& g) override;
+  /** @internal */
+  void lookAndFeelChanged() override;
+};
+
+static inline std::recursive_mutex plot_mutex;
+
+}  // namespace cmp

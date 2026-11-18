@@ -1,6 +1,6 @@
 /**
  * Copyright (c) 2022 Frans Rosencrantz
- * 
+ *
  * This software is released under the MIT License.
  * https://opensource.org/licenses/MIT
  */
@@ -22,10 +22,11 @@ class fill : public juce::Component {
     addAndMakeVisible(m_plot);
 
     // Plot some values.
-    m_plot.plot({cmp::generateSineWaveVector<float>(1024, -10.0f, 0.0f, 10),
-                 cmp::generateSineWaveVector<float>(1024, 10.0f, 20.0f, 2)});
+    m_plot.plot(
+        {{.y = cmp::generateSineWaveVector<float>(1024, -10.0f, 0.0f, 10)},
+         {.y = cmp::generateSineWaveVector<float>(1024, 10.0f, 20.0f, 2)}});
 
-    // Fill the area between the two first graph lines with colour aliceblue
+    // Fill the area between the two first series with colour aliceblue
     // with an alpha of 0.5.
     m_plot.fillBetween({{0, 1}}, {juce::Colours::aliceblue.withAlpha(0.3f)});
   };

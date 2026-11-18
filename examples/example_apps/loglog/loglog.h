@@ -1,6 +1,6 @@
 /**
  * Copyright (c) 2022 Frans Rosencrantz
- * 
+ *
  * This software is released under the MIT License.
  * https://opensource.org/licenses/MIT
  */
@@ -21,11 +21,9 @@ class loglog : public juce::Component {
     // Add the plot object as a child component.
     addAndMakeVisible(m_plot);
 
-    const auto values = {
-        cmp::generateUniformRandomVector<float>(1024, 1.0f, 1'000.0f)};
-
     // Plot some values.
-    m_plot.plot(values);
+    m_plot.plot(
+        {.y = cmp::generateUniformRandomVector<float>(1024, 1.0f, 1'000.0f)});
   };
 
   void resized() override {

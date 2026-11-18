@@ -1,6 +1,6 @@
 /**
  * Copyright (c) 2022 Frans Rosencrantz
- * 
+ *
  * This software is released under the MIT License.
  * https://opensource.org/licenses/MIT
  */
@@ -21,7 +21,7 @@ class simple : public juce::Component {
     addAndMakeVisible(m_plot);
 
     // Plot some values.
-    m_plot.plot({{1, 3, 7, 9, 13}});
+    m_plot.plot({.y = {1, 3, 7, 9, 13}});
   };
 
   void resized() override {
@@ -29,4 +29,4 @@ class simple : public juce::Component {
     m_plot.setBounds(getBounds());
   };
 };
-}
+}  // namespace examples

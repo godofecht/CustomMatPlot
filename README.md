@@ -6,14 +6,12 @@ CustomMatPlot (CMP) is a plotting library for C++. It provides an API for embedd
 | ![Image](img/spread.png)  | ![Image](img/sines.png)|
 | ------------- | ------------- |
 
-> Note: I'm not a senior developer so there may be several design flaws.
-
-## Table of Content
+## Table of Contents
   - [Features](#features)
   - [Requirements](#requirements)
   - [Controls](#controls)
   - [LookAndFeel](#lookandfeel)
-  - [Graph line attributes](#graph-line-attributes)
+  - [Series attributes](#series-attributes)
   - [Examples](#examples)
   - [Realtime frequency response example](#realtime-frequency-response-example)
   - [Tests](#tests)
@@ -30,37 +28,40 @@ Below is the feature list of CMP:
 - Legend.
 - Zoom.
 - Trace.
-- Fill area between two graphs.
+- Fill area between two series.
 - Axis labels.
 - Ticks and Tick-labels.
 - Grids and tiny grids.
 - Markers: Star, triangles, square etc.
 - Custom stroke path.
 - Callback for every visible data point.
-- Callback for tace points.
-- Two different downsampler levels 
+- Callback for trace points.
+- Two different downsampler levels.
+- Move points in the plot with mouse.
+- Customizable user input mapping using lookandfeel class.
 
 ![Image](img/heart.png) 
 
 ## Requirements
 <a name="requirements"></a>
 
-- Compiler that supports C++20  (TODO: Make it support 17)
+- Compiler that supports C++17
 - CMake 3.12
 
 ## Controls
 <a name="controls"></a>
 
-The CMP compontent implements MouseEvents to interact with the plot using the mouse. Below is a list with the current added mouse commands:
+The CMP component implements MouseEvents to interact with the plot using the mouse. Below is a list of default mouse commands which can be overridden using a custom lookandfeel class (see "move_pixel_points" example):
 
-1. Left click drag anywhere in the graph area to zoom into the plot. The zoom area is displayed as traced lined rectangle.
+1. Left-click and drag anywhere in the axes area to zoom into the plot. The zoom area is displayed as a traced rectangle.
 2. Right click to zoom out to home.
-3. Double-click to add a trace-point to the graph lines closest to the mouse pointer.
+3. Double-click to add a trace-point to the series closest to the mouse pointer.
 4. Double-click on a trace-point to remove it.
-5. Drag the trace point to move it along the graph-line.
+5. Drag the trace point to move it along the series.
 6. Move the trace point label by dragging it.
-7. Move the legend to by dragging it.
-8. [TODO] Panning
+7. Move the legend by dragging it.
+8. Move pixel points.
+9. Panning.
 
 ## LookAndFeel
 <a name="lookandfeel"></a>
@@ -69,12 +70,12 @@ Customize the plot to your liking by overriding the lookandfeel functions. See t
 
 ![Image](img/lookandfeel.png)
 
-## Graph line attributes
-<a name="graph-line-attributes"></a>
+## Series attributes
+<a name="series-attributes"></a>
 
-Use the graph line attributes to change the appearance of the graph lines. See custom_graph_attributes example.
+Use the series attributes to change the appearance of the series. See custom_series_attributes example.
 
-![Image](img/graph_line_attributes.png)
+![Image](img/series_attributes.png)
 
 ## Examples
 <a name="examples"></a>
@@ -105,8 +106,30 @@ An example app plotting the frequency response of the incoming left and right au
 ![Image](img/freq-plot-ui.png)
 
 ## Tests
+
+### Unit testing
+The `juce::UnitTest` class is wrapped into macros to make it easier to write new structured tests.
+
+```cpp
+SECTION(PlotTest, "Plot class") {
+  cmp::Plot plot;
+
+  TEST("Part 1: empty series.") {
+    const auto series = getChildComponentHelper<cmp::Series>(plot);
+    expect(series.empty());
+  }
+
+  TEST("Part 2: single series") {
+    plot.plot({.y = y_data1});
+    ...
+  }
+}
+```
+
+
+### Manual tests
 <a name="tests"></a>
-To make it more convenient to write new tests the CMP library implements tests macros similar to the macros in google tests.
+To make it more convenient to write new manual tests, the CMP library implements test macros similar to those in Google tests.
 
 The following example below will plot a ramp of 10 values from 0-9:
 ```cpp
@@ -116,7 +139,7 @@ TEST(ramp, non_real_time) {
   std::vector<float> y_test_data(10u);
   std::iota(y_test_data.begin(), y_test_data.end(), 0.0f);
 
-  PLOT_Y({y_test_data});
+  GET_PLOT->plot({.y = y_test_data});
 }
 ```
 
